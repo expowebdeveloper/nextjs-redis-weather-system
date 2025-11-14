@@ -1,0 +1,20 @@
+{
+  "name": "weather-producer",
+  "version": "1.0.0",
+  "description": "Scheduler service that enqueues weather jobs to Redis",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "ioredis": "^5.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "ts-node": "^10.9.2",
+    "typescript": "^5"
+  }
+}
+

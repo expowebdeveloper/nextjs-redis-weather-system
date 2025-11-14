@@ -1,0 +1,107 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: weather-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-weather_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-weather_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-weather_db}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-weather_user}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - weather-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: weather-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - weather-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: weather-app
+    ports:
+      - "3000:3000"
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-weather_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-weather_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-weather_db}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_QUEUE_NAME: weather-jobs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - weather-network
+
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    container_name: weather-worker
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-weather_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-weather_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-weather_db}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_QUEUE_NAME: weather-jobs
+      OPEN_METEO_BASE_URL: https://api.open-meteo.com/v1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - weather-network
+
+  producer:
+    build:
+      context: ./producer
+      dockerfile: Dockerfile
+    container_name: weather-producer
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_QUEUE_NAME: weather-jobs
+      JOB_INTERVAL_MS: 60000
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - weather-network
+
+volumes:
+  postgres_data:
+
+networks:
+  weather-network:
+    driver: bridge
+
